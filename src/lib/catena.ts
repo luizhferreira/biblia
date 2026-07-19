@@ -1,6 +1,7 @@
 /* ── Catena Aurea (St. Thomas Aquinas' golden chain) ──────────
- * Patristic commentary on the Gospel of John, keyed by "chapter.verse".
- * Loaded lazily on first use to keep the initial view light.
+ * Patristic commentary on the four Gospels, keyed by "chapter.verse".
+ * Each Gospel is loaded lazily and cached independently, so opening a
+ * commentary only fetches the data for the Gospel being read.
  */
 
 export interface CatenaSegment {
@@ -15,37 +16,45 @@ export interface CatenaEntry {
 
 type CatenaData = Record<string, CatenaEntry>;
 
-let cache: CatenaData | null = null;
-let loading: Promise<CatenaData> | null = null;
+/** Book file id (from data/books.ts) → dynamic import of its catena. */
+const LOADERS: Record<string, () => Promise<{ default: CatenaData }>> = {
+  mt: () => import("../data/catenaMatthew.json") as Promise<{ default: CatenaData }>,
+  mc: () => import("../data/catenaMark.json") as Promise<{ default: CatenaData }>,
+  lc: () => import("../data/catenaLuke.json") as Promise<{ default: CatenaData }>,
+  jo: () => import("../data/catenaJohn.json") as Promise<{ default: CatenaData }>,
+};
 
-/** Only the Gospel of John is covered by this catena. */
+const cache: Record<string, CatenaData> = {};
+const loading: Record<string, Promise<CatenaData>> = {};
+
+/** True if a catena exists for this book (the four Gospels). */
 export function catenaAvailable(bookFile: string): boolean {
-  return bookFile === "jo";
+  return bookFile in LOADERS;
 }
 
-async function load(): Promise<CatenaData> {
-  if (cache) return cache;
-  if (!loading) {
-    loading = import("../data/catenaJohn.json")
+async function load(bookFile: string): Promise<CatenaData> {
+  if (cache[bookFile]) return cache[bookFile];
+  if (!loading[bookFile]) {
+    loading[bookFile] = LOADERS[bookFile]()
       .then((m) => {
-        cache = (m.default ?? m) as CatenaData;
-        return cache;
+        cache[bookFile] = (m.default ?? (m as unknown as CatenaData)) as CatenaData;
+        return cache[bookFile];
       })
       .catch((e) => {
-        loading = null; // allow retry
+        delete loading[bookFile]; // allow retry
         throw e;
       });
   }
-  return loading;
+  return loading[bookFile];
 }
 
-/** Returns the commentary for a John verse, or null if none exists. */
+/** Returns the commentary for a Gospel verse, or null if none exists. */
 export async function fetchCatena(
   bookFile: string,
   chapter: number,
   verse: number,
 ): Promise<CatenaEntry | null> {
   if (!catenaAvailable(bookFile)) return null;
-  const data = await load();
+  const data = await load(bookFile);
   return data[`${chapter}.${verse}`] ?? null;
 }
