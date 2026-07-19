@@ -7,6 +7,8 @@ import {
   type ParallelRow,
 } from "./lib/bibleApi";
 import LiturgiaView from "./components/Liturgia";
+import CatenaPanel from "./components/CatenaPanel";
+import { catenaAvailable } from "./lib/catena";
 
 type Tab = "biblia" | "liturgia";
 
@@ -45,9 +47,16 @@ export default function App() {
   const [showPt, setShowPt] = useState(true);
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [catenaVerse, setCatenaVerse] = useState<number | null>(null);
   const readerRef = useRef<HTMLDivElement>(null);
 
   const book: BookDef = BOOKS[bookIndex];
+  const hasCatena = catenaAvailable(book.file);
+
+  // Close the commentary when navigating to another chapter/book.
+  useEffect(() => {
+    setCatenaVerse(null);
+  }, [bookIndex, chapter]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -309,6 +318,12 @@ export default function App() {
               <div className="mt-2 flex justify-center text-[#8a6c31]">
                 <Fleuron className="h-4 w-28" />
               </div>
+              {hasCatena && (
+                <p className="mt-2 text-[0.7rem] text-[#6b5c3a]">
+                  Toque no número do versículo ✦ para ver o comentário dos
+                  Padres (Catena Aurea).
+                </p>
+              )}
             </div>
 
             {/* States */}
@@ -336,9 +351,22 @@ export default function App() {
                         text={r.la}
                         latin
                         border={showPt}
+                        onCatena={
+                          hasCatena ? () => setCatenaVerse(r.verse) : undefined
+                        }
+                        active={catenaVerse === r.verse}
                       />
                     )}
-                    {showPt && <VerseCell n={r.verse} text={r.pt} />}
+                    {showPt && (
+                      <VerseCell
+                        n={r.verse}
+                        text={r.pt}
+                        onCatena={
+                          hasCatena ? () => setCatenaVerse(r.verse) : undefined
+                        }
+                        active={catenaVerse === r.verse}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -376,6 +404,14 @@ export default function App() {
             </footer>
           </main>
         </div>
+
+        <CatenaPanel
+          bookFile={book.file}
+          bookLa={book.la}
+          chapter={chapter}
+          verse={catenaVerse}
+          onClose={() => setCatenaVerse(null)}
+        />
         </>
         )}
       </div>
@@ -476,24 +512,49 @@ function VerseCell({
   text,
   latin = false,
   border = false,
+  onCatena,
+  active = false,
 }: {
   n: number;
   text?: string;
   latin?: boolean;
   border?: boolean;
+  onCatena?: () => void;
+  active?: boolean;
 }) {
   return (
     <div
-      className={`px-5 py-2 ${border ? "md:border-r md:border-[#241d10]" : ""}`}
+      className={`px-5 py-2 ${border ? "md:border-r md:border-[#241d10]" : ""} ${
+        active ? "bg-[#1d1608]/70" : ""
+      }`}
     >
       <p
         className={`font-serif-read text-[1.05rem] leading-relaxed ${
           latin ? "italic text-[#d9cba3]" : "text-[#e8dfc8]"
         }`}
       >
-        <sup className="mr-1 align-super font-display text-[0.7rem] font-semibold text-[#c99f4c]">
-          {n}
-        </sup>
+        {onCatena ? (
+          <button
+            onClick={onCatena}
+            title="Ver comentário dos Padres (Catena Aurea)"
+            className={`group mr-1 inline-flex items-baseline align-super font-display text-[0.7rem] font-semibold transition ${
+              active
+                ? "text-[#f0d693]"
+                : "text-[#c99f4c] hover:text-[#f0d693]"
+            }`}
+          >
+            <span className="underline decoration-dotted decoration-[#8a6c31] underline-offset-2">
+              {n}
+            </span>
+            <span className="ml-0.5 text-[0.6rem] opacity-60 group-hover:opacity-100">
+              ✦
+            </span>
+          </button>
+        ) : (
+          <sup className="mr-1 align-super font-display text-[0.7rem] font-semibold text-[#c99f4c]">
+            {n}
+          </sup>
+        )}
         {text ?? (
           <span className="text-sm not-italic text-[#6b5c3a]">
             — indisponível nesta versão —
