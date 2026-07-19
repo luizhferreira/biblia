@@ -8,7 +8,7 @@ import {
 } from "./lib/bibleApi";
 import LiturgiaView from "./components/Liturgia";
 import CatenaPanel from "./components/CatenaPanel";
-import { catenaAvailable } from "./lib/catena";
+import { catenaAvailable, catenaChapterVerses } from "./lib/catena";
 
 type Tab = "biblia" | "liturgia";
 
@@ -48,6 +48,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [catenaVerse, setCatenaVerse] = useState<number | null>(null);
+  const [catenaSet, setCatenaSet] = useState<Set<number>>(new Set());
   const readerRef = useRef<HTMLDivElement>(null);
 
   const book: BookDef = BOOKS[bookIndex];
@@ -57,6 +58,21 @@ export default function App() {
   useEffect(() => {
     setCatenaVerse(null);
   }, [bookIndex, chapter]);
+
+  // Load which verses of the current chapter have commentary, to mark them.
+  useEffect(() => {
+    if (!hasCatena) {
+      setCatenaSet(new Set());
+      return;
+    }
+    let alive = true;
+    catenaChapterVerses(book.file, chapter)
+      .then((s) => alive && setCatenaSet(s))
+      .catch(() => alive && setCatenaSet(new Set()));
+    return () => {
+      alive = false;
+    };
+  }, [hasCatena, book.file, chapter]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -352,7 +368,9 @@ export default function App() {
                         latin
                         border={showPt}
                         onCatena={
-                          hasCatena ? () => setCatenaVerse(r.verse) : undefined
+                          hasCatena && catenaSet.has(r.verse)
+                            ? () => setCatenaVerse(r.verse)
+                            : undefined
                         }
                         active={catenaVerse === r.verse}
                       />
@@ -362,7 +380,9 @@ export default function App() {
                         n={r.verse}
                         text={r.pt}
                         onCatena={
-                          hasCatena ? () => setCatenaVerse(r.verse) : undefined
+                          hasCatena && catenaSet.has(r.verse)
+                            ? () => setCatenaVerse(r.verse)
+                            : undefined
                         }
                         active={catenaVerse === r.verse}
                       />

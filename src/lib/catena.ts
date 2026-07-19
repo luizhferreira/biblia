@@ -48,6 +48,24 @@ async function load(bookFile: string): Promise<CatenaData> {
   return loading[bookFile];
 }
 
+/** Verse numbers in a chapter that have commentary (for marking them). */
+export async function catenaChapterVerses(
+  bookFile: string,
+  chapter: number,
+): Promise<Set<number>> {
+  if (!catenaAvailable(bookFile)) return new Set();
+  const data = await load(bookFile);
+  const prefix = `${chapter}.`;
+  const set = new Set<number>();
+  for (const key of Object.keys(data)) {
+    if (key.startsWith(prefix)) {
+      const v = Number(key.slice(prefix.length));
+      if (!Number.isNaN(v)) set.add(v);
+    }
+  }
+  return set;
+}
+
 /** Returns the commentary for a Gospel verse, or null if none exists. */
 export async function fetchCatena(
   bookFile: string,
