@@ -4,6 +4,7 @@ import {
   fetchChapter,
   fetchLocalChapter,
   mergeVerses,
+  type Lang,
   type ParallelRow,
 } from "./lib/bibleApi";
 import LiturgiaView from "./components/Liturgia";
@@ -13,6 +14,27 @@ import { catenaAvailable, catenaChapterVerses } from "./lib/catena";
 
 type Tab = "biblia" | "liturgia";
 
+/* ── Parallel translation columns ──────────────────────── */
+interface ColumnDef {
+  key: Lang;
+  label: string; // toggle label
+  title: string; // reader column header
+  subtitle: string;
+  italic?: boolean; // Latin is rendered in italic
+}
+
+const COLUMNS: ColumnDef[] = [
+  { key: "la", label: "Latina", title: "Vulgata Latina", subtitle: "Editio Clementina", italic: true },
+  { key: "pt", label: "Português", title: "Tradução Portuguesa", subtitle: "Pe. Manuel de Matos Soares" },
+  { key: "en", label: "English", title: "King James Version", subtitle: "Authorized Version · 1611" },
+];
+
+const GRID_COLS: Record<number, string> = {
+  1: "md:grid-cols-1",
+  2: "md:grid-cols-2",
+  3: "md:grid-cols-3",
+};
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("biblia");
   const [bookIndex, setBookIndex] = useState(49); // João / Ioannes
@@ -20,8 +42,11 @@ export default function App() {
   const [rows, setRows] = useState<ParallelRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showLa, setShowLa] = useState(true);
-  const [showPt, setShowPt] = useState(true);
+  const [show, setShow] = useState<Record<Lang, boolean>>({
+    la: true,
+    pt: true,
+    en: false,
+  });
   const [query, setQuery] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [catenaVerse, setCatenaVerse] = useState<number | null>(null);
@@ -57,9 +82,10 @@ export default function App() {
     setError(null);
     (async () => {
       try {
-        const [laRes, ptRes] = await Promise.allSettled([
+        const [laRes, ptRes, enRes] = await Promise.allSettled([
           fetchChapter(book.nr, chapter, "vulgate", ctrl.signal),
           fetchLocalChapter(book.file, chapter),
+          fetchChapter(book.nr, chapter, "kjv", ctrl.signal),
         ]);
         if (
           laRes.status === "rejected" &&
@@ -69,12 +95,17 @@ export default function App() {
         }
         const la = laRes.status === "fulfilled" ? laRes.value : [];
         const pt = ptRes.status === "fulfilled" ? ptRes.value : [];
-        if (la.length === 0 && pt.length === 0) {
-          if (laRes.status === "rejected" || ptRes.status === "rejected") {
+        const en = enRes.status === "fulfilled" ? enRes.value : [];
+        if (la.length === 0 && pt.length === 0 && en.length === 0) {
+          if (
+            laRes.status === "rejected" ||
+            ptRes.status === "rejected" ||
+            enRes.status === "rejected"
+          ) {
             setError("Não foi possível consultar o códice. Tente novamente.");
           }
         }
-        setRows(mergeVerses(la, pt));
+        setRows(mergeVerses({ la, pt, en }));
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
           setError("Não foi possível consultar o códice. Tente novamente.");
@@ -125,8 +156,10 @@ export default function App() {
     }
   }
 
-  const gridCols =
-    showLa && showPt ? "md:grid-cols-2" : "md:grid-cols-1";
+  const activeCols = COLUMNS.filter((c) => show[c.key]);
+  const gridCols = GRID_COLS[activeCols.length] ?? "md:grid-cols-1";
+  const toggle = (key: Lang) =>
+    setShow((s) => ({ ...s, [key]: !s[key] }));
 
   return (
     <div className="bg-night stars relative min-h-screen">
@@ -220,12 +253,15 @@ export default function App() {
 
           {/* Column toggles */}
           <div className="flex w-full items-center gap-2 border-t border-[#332a16] pt-3 sm:w-auto sm:border-0 sm:pt-0">
-            <Toggle active={showLa} onClick={() => setShowLa((v) => !v)}>
-              Latina
-            </Toggle>
-            <Toggle active={showPt} onClick={() => setShowPt((v) => !v)}>
-              Português
-            </Toggle>
+            {COLUMNS.map((col) => (
+              <Toggle
+                key={col.key}
+                active={show[col.key]}
+                onClick={() => toggle(col.key)}
+              >
+                {col.label}
+              </Toggle>
+            ))}
           </div>
         </div>
 
@@ -285,22 +321,21 @@ export default function App() {
             <div
               className={`sticky top-0 z-10 grid grid-cols-1 border-b border-[#332a16] bg-[#100e08]/95 backdrop-blur ${gridCols}`}
             >
-              {showLa && (
-                <div className="border-r border-[#332a16] px-6 py-4 text-center">
-                  <p className="font-display gilt text-lg">Vulgata Latina</p>
+              {activeCols.map((col, i) => (
+                <div
+                  key={col.key}
+                  className={`px-6 py-4 text-center ${
+                    i < activeCols.length - 1
+                      ? "border-r border-[#332a16]"
+                      : ""
+                  }`}
+                >
+                  <p className="font-display gilt text-lg">{col.title}</p>
                   <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[#6b5c3a]">
-                    Editio Clementina
+                    {col.subtitle}
                   </p>
                 </div>
-              )}
-              {showPt && (
-                <div className="px-6 py-4 text-center">
-                  <p className="font-display gilt text-lg">Tradução Portuguesa</p>
-                  <p className="text-[0.6rem] uppercase tracking-[0.3em] text-[#6b5c3a]">
-                    Pe. Manuel de Matos Soares
-                  </p>
-                </div>
-              )}
+              ))}
             </div>
 
             {/* Chapter heading */}
@@ -338,12 +373,13 @@ export default function App() {
                     key={r.verse}
                     className={`grid grid-cols-1 gap-0 rounded transition hover:bg-[#171207]/60 ${gridCols}`}
                   >
-                    {showLa && (
+                    {activeCols.map((col, i) => (
                       <VerseCell
+                        key={col.key}
                         n={r.verse}
-                        text={r.la}
-                        latin
-                        border={showPt}
+                        text={r[col.key]}
+                        latin={col.italic}
+                        border={i < activeCols.length - 1}
                         onCatena={
                           hasCatena && catenaSet.has(r.verse)
                             ? () => setCatenaVerse(r.verse)
@@ -351,19 +387,7 @@ export default function App() {
                         }
                         active={catenaVerse === r.verse}
                       />
-                    )}
-                    {showPt && (
-                      <VerseCell
-                        n={r.verse}
-                        text={r.pt}
-                        onCatena={
-                          hasCatena && catenaSet.has(r.verse)
-                            ? () => setCatenaVerse(r.verse)
-                            : undefined
-                        }
-                        active={catenaVerse === r.verse}
-                      />
-                    )}
+                    ))}
                   </div>
                 ))}
               </div>
@@ -386,7 +410,8 @@ export default function App() {
                 </button>
               </div>
               <p>
-                Vulgata Clementina (latim) consultada via{" "}
+                Vulgata Clementina (latim) e King James (inglês) consultadas
+                via{" "}
                 <a
                   href="https://getbible.net"
                   target="_blank"
@@ -396,7 +421,9 @@ export default function App() {
                   getbible.net
                 </a>
                 . Tradução portuguesa do Pe. Manuel de Matos Soares (1956),
-                incluída na aplicação — segue a numeração da Vulgata.
+                incluída na aplicação — segue a numeração da Vulgata. A King
+                James omite os livros deuterocanônicos e usa a numeração
+                hebraica dos Salmos.
               </p>
             </footer>
           </main>

@@ -96,20 +96,23 @@ export async function fetchLocalChapter(
     .filter((v) => v.text.length > 0);
 }
 
-export interface ParallelRow {
-  verse: number;
-  la?: string;
-  pt?: string;
-}
+/** Available parallel columns: Latin, Portuguese, English. */
+export type Lang = "la" | "pt" | "en";
 
-/** Merge two verse lists into aligned rows keyed by verse number. */
-export function mergeVerses(la: Verse[], pt: Verse[]): ParallelRow[] {
+export type ParallelRow = { verse: number } & Partial<Record<Lang, string>>;
+
+/**
+ * Merge verse lists (keyed by language) into aligned rows by verse number.
+ * Any subset of languages may be provided.
+ */
+export function mergeVerses(cols: Partial<Record<Lang, Verse[]>>): ParallelRow[] {
   const map = new Map<number, ParallelRow>();
-  for (const v of la) map.set(v.verse, { verse: v.verse, la: v.text });
-  for (const v of pt) {
-    const row = map.get(v.verse);
-    if (row) row.pt = v.text;
-    else map.set(v.verse, { verse: v.verse, pt: v.text });
+  for (const [lang, verses] of Object.entries(cols) as [Lang, Verse[]][]) {
+    for (const v of verses) {
+      const row = map.get(v.verse) ?? { verse: v.verse };
+      row[lang] = v.text;
+      map.set(v.verse, row);
+    }
   }
   return [...map.values()].sort((a, b) => a.verse - b.verse);
 }
