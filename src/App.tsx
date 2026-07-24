@@ -121,6 +121,21 @@ export default function App() {
     readerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, [bookIndex, chapter]);
 
+  // Arrow keys navigate chapters (only on the reader, not while typing).
+  useEffect(() => {
+    if (tab !== "biblia") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (catenaVerse !== null || sidebarOpen) return;
+      const el = e.target as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (e.key === "ArrowLeft") prevChapter();
+      else if (e.key === "ArrowRight") nextChapter();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, catenaVerse, sidebarOpen, bookIndex, chapter]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return BOOKS.map((b, i) => ({ b, i })).filter(
@@ -162,31 +177,24 @@ export default function App() {
     setShow((s) => ({ ...s, [key]: !s[key] }));
 
   return (
-    <div className="bg-night stars relative min-h-screen">
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-[1500px] flex-col px-3 sm:px-6">
-        {/* ── Header ─────────────────────────────── */}
-        <header className="pt-8 pb-6 text-center">
-          <div className="mb-3 flex items-center justify-center gap-3 text-[#b8933f]">
-            <Fleuron className="h-4 w-20 opacity-70" />
-            <Cross className="candle h-5 w-5" />
-            <Fleuron className="h-4 w-20 -scale-x-100 opacity-70" />
+    <div className="bg-night stars relative flex h-[100dvh] flex-col overflow-hidden">
+      <div className="relative z-10 mx-auto flex h-full min-h-0 w-full max-w-[1500px] flex-col px-3 sm:px-6">
+        {/* ── Header (compacto, fixo) ─────────────── */}
+        <header className="flex shrink-0 flex-col items-center gap-3 pt-4 pb-3 sm:flex-row sm:justify-between sm:gap-4 sm:pt-5 sm:pb-4">
+          <div className="flex items-center gap-3 text-[#b8933f]">
+            <Cross className="candle h-6 w-6 shrink-0" />
+            <div className="text-center sm:text-left">
+              <h1 className="font-blackletter gilt text-2xl leading-none sm:text-3xl">
+                Codex Sacræ
+              </h1>
+              <p className="font-display mt-1 text-[0.55rem] uppercase tracking-[0.4em] text-[#caa257]">
+                Vulgata&nbsp;·&nbsp;Matos Soares&nbsp;·&nbsp;KJV
+              </p>
+            </div>
           </div>
-          <h1 className="font-blackletter gilt text-4xl leading-none sm:text-6xl">
-            Codex Sacræ
-          </h1>
-          <p className="font-display mt-3 text-[0.6rem] uppercase tracking-[0.45em] text-[#caa257]">
-            Vulgata Latina&nbsp;&nbsp;·&nbsp;&nbsp;Tradução Matos Soares
-          </p>
-          <p className="mx-auto mt-3 max-w-xl text-sm italic text-[#9a8d6f]">
-            “Lucerna pedibus meis verbum tuum, et lumen semitis meis.”
-          </p>
-          <p className="mx-auto mt-2 max-w-lg text-[0.7rem] text-[#6b5c3a]">
-            Bíblia católica completa (73 livros) — tradução portuguesa do
-            Pe. Manuel de Matos Soares (1956) em paralelo à Vulgata Clementina.
-          </p>
 
           {/* ── Abas ─────────────────────────────── */}
-          <nav className="mt-5 inline-flex rounded-md border border-[#5a4a24] bg-[#12100a]/90 p-1">
+          <nav className="inline-flex rounded-md border border-[#5a4a24] bg-[#12100a]/90 p-1">
             <TabButton active={tab === "biblia"} onClick={() => setTab("biblia")}>
               ✠ Bíblia
             </TabButton>
@@ -200,15 +208,15 @@ export default function App() {
         </header>
 
         {tab === "liturgia" && (
-          <div className="flex flex-1 pb-8">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain pb-6 [scrollbar-gutter:stable]">
             <LiturgiaView />
           </div>
         )}
 
         {tab === "biblia" && (
         <>
-        {/* ── Control bar ────────────────────────── */}
-        <div className="frame-gold sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-md bg-[#12100a]/90 px-3 py-3 backdrop-blur">
+        {/* ── Control bar (fixa) ─────────────────── */}
+        <div className="frame-gold z-20 mb-3 flex shrink-0 flex-wrap items-center gap-3 rounded-md bg-[#12100a]/90 px-3 py-2.5 backdrop-blur">
           <button
             onClick={() => setSidebarOpen((s) => !s)}
             className="font-display rounded border border-[#5a4a24] bg-[#1b170e] px-3 py-2 text-xs uppercase tracking-widest text-[#d8b366] transition hover:bg-[#251f12] md:hidden"
@@ -266,7 +274,7 @@ export default function App() {
         </div>
 
         {/* ── Body ───────────────────────────────── */}
-        <div className="flex flex-1 gap-4 pb-8">
+        <div className="flex min-h-0 flex-1 gap-4 pb-3">
           {/* Sidebar */}
           <aside
             className={`${
@@ -275,7 +283,7 @@ export default function App() {
                 : "hidden"
             } md:static md:z-auto md:block md:w-72 md:shrink-0 md:bg-transparent md:p-0`}
           >
-            <div className="frame-gold flex h-full max-h-[80vh] flex-col rounded-md bg-[#100e08] md:h-[calc(100vh-2rem)] md:max-h-none">
+            <div className="frame-gold flex h-full max-h-[80vh] min-h-0 flex-col rounded-md bg-[#100e08] md:max-h-none">
               <div className="flex items-center justify-between border-b border-[#332a16] p-3">
                 <span className="font-display text-xs uppercase tracking-[0.3em] text-[#d8b366]">
                   Bibliotheca
@@ -295,7 +303,7 @@ export default function App() {
                   className="font-serif-read w-full rounded border border-[#3a3018] bg-[#1b170e] px-3 py-2 text-sm text-[#e8dfc8] placeholder-[#6b5c3a] outline-none focus:border-[#8a6c31]"
                 />
               </div>
-              <nav className="flex-1 overflow-y-auto px-2 pb-3">
+              <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-3">
                 <BookGroup
                   title="Vetus Testamentum"
                   items={atBooks}
@@ -315,7 +323,7 @@ export default function App() {
           {/* Reader */}
           <main
             ref={readerRef}
-            className="frame-gold relative flex-1 overflow-y-auto rounded-md bg-[#0d0b07]/80 md:h-[calc(100vh-2rem)]"
+            className="frame-gold relative h-full min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain rounded-md bg-[#0d0b07]/80 [scrollbar-gutter:stable]"
           >
             {/* Column headers */}
             <div
@@ -367,7 +375,11 @@ export default function App() {
 
             {/* Verses */}
             {!loading && !error && rows.length > 0 && (
-              <div className="fadein px-2 py-6 sm:px-4">
+              <div
+                className={`fadein px-2 py-6 sm:px-4 ${
+                  activeCols.length === 1 ? "mx-auto max-w-3xl" : ""
+                }`}
+              >
                 {rows.map((r) => (
                   <div
                     key={r.verse}

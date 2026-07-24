@@ -15,6 +15,14 @@ body {
   font-family: "EB Garamond", Georgia, serif;
   background-color: #0a0a0f;
   color: #e8dfc8;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Firefox scrollbars (thin, muted gold) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #4a3818 rgba(20, 18, 14, 0.4);
 }
 
 .font-display {
@@ -74,21 +82,20 @@ body {
     0 10px 40px rgba(0, 0, 0, 0.6);
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — slim & muted */
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 7px;
+  height: 7px;
 }
 *::-webkit-scrollbar-track {
-  background: rgba(20, 18, 14, 0.6);
+  background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #6b5324, #3a2c12);
+  background: #3a2c12;
   border-radius: 8px;
-  border: 1px solid rgba(191, 149, 63, 0.25);
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, #8a6c31, #4a3818);
+  background: #6b5324;
 }
 
 @keyframes flicker {
