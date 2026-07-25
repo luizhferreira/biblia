@@ -2,6 +2,35 @@
 
 :root {
   color-scheme: dark;
+
+  /* ── Tokens: modo escuro "Noite" (padrão) ── */
+  --page: #0b0a09;
+  --surf: #131211;
+  --raise: #1a1714;
+  --sink: #0e0d0b;
+  --line: rgba(191, 149, 63, 0.18);
+  --line-soft: rgba(191, 149, 63, 0.1);
+  --ink: #e0d5bb;
+  --ink-2: #c3b797;
+  --mute: #8a8270;
+  --faint: #6b6455;
+  --gold: #c9a55f;
+  --gold-dim: #8a7440;
+  --gold-lit: #f0d693;
+}
+
+/* ── Modo escuro "Tinta": cinza-tinta quente, menos contraste ── */
+[data-theme="tinta"] {
+  --page: #16130f;
+  --surf: #1d1a14;
+  --raise: #252017;
+  --sink: #191510;
+  --line: rgba(191, 149, 63, 0.15);
+  --line-soft: rgba(191, 149, 63, 0.08);
+  --ink: #d9cfb6;
+  --ink-2: #bcb094;
+  --mute: #8d8471;
+  --faint: #6f6858;
 }
 
 html,
@@ -13,10 +42,17 @@ body,
 body {
   margin: 0;
   font-family: "EB Garamond", Georgia, serif;
-  background-color: #0a0a0f;
-  color: #e8dfc8;
+  background-color: var(--page);
+  color: var(--ink);
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 /* Firefox scrollbars (thin, muted gold) */
@@ -37,34 +73,31 @@ body {
   font-family: "EB Garamond", Georgia, serif;
 }
 
-/* Parchment / candlelit texture */
+/* Parchment / candlelit texture — mais discreta atrás do texto */
 .bg-night {
-  background-color: #0a0a0f;
+  background-color: var(--page);
   background-image:
-    radial-gradient(1200px 600px at 15% -10%, rgba(120, 90, 30, 0.16), transparent 60%),
-    radial-gradient(1000px 700px at 100% 0%, rgba(80, 60, 20, 0.14), transparent 55%),
-    radial-gradient(900px 900px at 50% 120%, rgba(60, 45, 90, 0.14), transparent 60%);
+    radial-gradient(1100px 520px at 12% -12%, rgba(120, 90, 30, 0.1), transparent 62%),
+    radial-gradient(900px 620px at 100% 0%, rgba(80, 60, 20, 0.08), transparent 58%);
 }
 
-/* Faint starfield */
+/* Faint starfield (usado apenas na Liturgia) */
 .stars::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(1px 1px at 20% 30%, rgba(255, 240, 200, 0.55), transparent),
-    radial-gradient(1px 1px at 70% 20%, rgba(255, 240, 200, 0.4), transparent),
-    radial-gradient(1px 1px at 40% 70%, rgba(255, 240, 200, 0.35), transparent),
-    radial-gradient(1px 1px at 85% 60%, rgba(255, 240, 200, 0.45), transparent),
-    radial-gradient(1px 1px at 55% 45%, rgba(255, 240, 200, 0.3), transparent),
-    radial-gradient(1px 1px at 10% 85%, rgba(255, 240, 200, 0.4), transparent),
-    radial-gradient(1px 1px at 90% 90%, rgba(255, 240, 200, 0.3), transparent);
+    radial-gradient(1px 1px at 20% 30%, rgba(255, 240, 200, 0.45), transparent),
+    radial-gradient(1px 1px at 70% 20%, rgba(255, 240, 200, 0.32), transparent),
+    radial-gradient(1px 1px at 40% 70%, rgba(255, 240, 200, 0.28), transparent),
+    radial-gradient(1px 1px at 85% 60%, rgba(255, 240, 200, 0.36), transparent),
+    radial-gradient(1px 1px at 10% 85%, rgba(255, 240, 200, 0.3), transparent);
   z-index: 0;
 }
 
 .gold-text {
-  color: #d8b366;
+  color: var(--gold);
 }
 
 .gilt {
@@ -80,6 +113,95 @@ body {
   box-shadow:
     inset 0 0 0 1px rgba(191, 149, 63, 0.12),
     0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+/* ── Leitor ─────────────────────────────────────────────── */
+
+/* Capitular iluminada no início do capítulo */
+.dropcap {
+  float: left;
+  margin: 0.14em 0.34em 0 0;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 3.1em;
+  line-height: 0.82;
+  color: var(--gold);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* Número de versículo com comentário da Catena Aurea */
+.verse-mark {
+  color: var(--gold);
+  text-decoration: underline dotted var(--gold-dim);
+  text-underline-offset: 3px;
+}
+.verse-mark::after {
+  content: "✦";
+  margin-left: 1px;
+  font-size: 0.78em;
+  opacity: 0.65;
+}
+.verse-mark:hover {
+  color: var(--gold-lit);
+}
+
+.verse-row:hover {
+  background: rgba(201, 165, 95, 0.045);
+}
+.verse-row[data-active="1"] {
+  background: rgba(201, 165, 95, 0.09);
+}
+
+/* Painéis laterais que empurram o texto (não cobrem) */
+aside[data-panel] {
+  overflow: hidden;
+  transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (max-width: 900px) {
+  aside[data-panel][data-open="1"] {
+    position: fixed;
+    top: 58px;
+    bottom: 0;
+    z-index: 50;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  }
+  aside[data-panel="books"][data-open="1"] {
+    left: 0;
+  }
+  aside[data-panel="catena"][data-open="1"] {
+    right: 0;
+  }
+  .parallel-row,
+  .parallel-head {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+}
+
+/* Controles de leitura */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: var(--line);
+  border-radius: 2px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: none;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--gold);
+  border: none;
+  cursor: pointer;
 }
 
 /* Custom scrollbar — slim & muted */
@@ -114,4 +236,12 @@ body {
 }
 .fadein {
   animation: fadein 0.5s ease-out both;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.rise {
+  animation: rise 0.18s ease-out both;
 }
