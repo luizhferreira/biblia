@@ -96,8 +96,12 @@ export async function fetchLocalChapter(
     .filter((v) => v.text.length > 0);
 }
 
-/** Available parallel columns: Latin, Portuguese, English. */
-export type Lang = "la" | "pt" | "en";
+/**
+ * Available parallel columns.
+ * "pt" = Matos Soares (empacotado) · "av" = Ave-Maria (buscado em runtime)
+ * "la" = Vulgata Clementina · "en" = King James
+ */
+export type Lang = "la" | "pt" | "en" | "av";
 
 export type ParallelRow = { verse: number } & Partial<Record<Lang, string>>;
 

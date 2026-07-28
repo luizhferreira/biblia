@@ -7,6 +7,7 @@ import {
   type Lang,
   type ParallelRow,
 } from "./lib/bibleApi";
+import { fetchAveMariaChapter } from "./lib/aveMaria";
 import LiturgiaView from "./components/Liturgia";
 import CatenaPanel from "./components/CatenaPanel";
 import { Cross, Fleuron } from "./components/ornaments";
@@ -35,6 +36,7 @@ interface ColumnDef {
 
 const COLUMNS: ColumnDef[] = [
   { key: "pt", label: "Pt", title: "Matos Soares", subtitle: "Tradução portuguesa · 1956" },
+  { key: "av", label: "AM", title: "Ave-Maria", subtitle: "Editora Ave-Maria · ed. atual" },
   { key: "la", label: "La", title: "Vulgata Latina", subtitle: "Editio Clementina", italic: true },
   { key: "en", label: "En", title: "King James Version", subtitle: "Authorized Version · 1611" },
 ];
@@ -61,7 +63,7 @@ const DEFAULTS: Prefs = {
   lh: 1.75,
   measure: 720,
   sidebarOpen: true,
-  show: { pt: true, la: false, en: false },
+  show: { pt: true, av: false, la: false, en: false },
   ornaments: true,
 };
 
@@ -159,21 +161,26 @@ export default function App() {
     setError(null);
     (async () => {
       try {
-        const [laRes, ptRes, enRes] = await Promise.allSettled([
+        const [laRes, ptRes, enRes, avRes] = await Promise.allSettled([
           fetchChapter(book.nr, chapter, "vulgate", ctrl.signal),
           fetchLocalChapter(book.file, chapter),
           fetchChapter(book.nr, chapter, "kjv", ctrl.signal),
+          fetchAveMariaChapter(book, chapter),
         ]);
         if (laRes.status === "rejected" && (laRes.reason as Error)?.name === "AbortError") return;
+        // A Ave-Maria vem de um único JSON compartilhado e não é abortável:
+        // descarta o resultado se o leitor já mudou de capítulo.
+        if (ctrl.signal.aborted) return;
         const la = laRes.status === "fulfilled" ? laRes.value : [];
         const pt = ptRes.status === "fulfilled" ? ptRes.value : [];
         const en = enRes.status === "fulfilled" ? enRes.value : [];
-        if (la.length === 0 && pt.length === 0 && en.length === 0) {
+        const av = avRes.status === "fulfilled" ? avRes.value : [];
+        if (la.length === 0 && pt.length === 0 && en.length === 0 && av.length === 0) {
           if (laRes.status === "rejected" || ptRes.status === "rejected" || enRes.status === "rejected") {
             setError("Não foi possível consultar o códice. Tente novamente.");
           }
         }
-        setRows(mergeVerses({ la, pt, en }));
+        setRows(mergeVerses({ la, pt, en, av }));
       } catch (e) {
         if ((e as Error).name !== "AbortError") {
           setError("Não foi possível consultar o códice. Tente novamente.");
@@ -718,6 +725,17 @@ export default function App() {
                   getbible.net
                 </a>{" "}
                 · Catena Aurea, tr. J. H. Newman (1841–45)
+                <br />
+                Tradução Ave-Maria © Editora Ave-Maria — carregada sob demanda de{" "}
+                <a
+                  href="https://github.com/fidalgobr/bibliaAveMariaJSON"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-[var(--gold-dim)] hover:text-[var(--gold)]"
+                >
+                  fonte pública em JSON
+                </a>
+                ; uso pessoal de estudo
               </p>
             </article>
           </main>
