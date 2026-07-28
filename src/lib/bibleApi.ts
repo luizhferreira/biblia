@@ -1,3 +1,5 @@
+import { loadJson, type DataBook } from "./dataFetch";
+
 export interface Verse {
   verse: number;
   text: string;
@@ -51,49 +53,20 @@ export async function fetchChapter(
 
 /* ── Tradução Matos Soares (arquivos locais em biblia-db-main) ── */
 
-interface LocalVerse {
-  numero: number;
-  texto: string;
-}
-
-interface LocalChapter {
-  capitulo: number;
-  versiculos: LocalVerse[];
-}
-
-interface LocalBook {
-  livro: string;
-  capitulos: LocalChapter[];
-}
-
-const localBooks = import.meta.glob<LocalBook>(
-  "../../biblia-db-main/{antigotestamento,novotestamento}/*.json",
-  { import: "default" },
-);
-
 /**
- * Load a chapter of the Matos Soares translation from the bundled
- * biblia-db-main JSON files. `file` is the book filename without extension
- * (e.g. "gn", "1sm").
+ * Load a chapter of the Matos Soares translation. `scripts/build-data.ts`
+ * normaliza os arquivos de `biblia-db-main/` para `public/data/pt/`, de onde
+ * cada livro é buscado sob demanda. `file` is the book filename without
+ * extension (e.g. "gn", "1sm").
  */
 export async function fetchLocalChapter(
   file: string,
   chapter: number,
 ): Promise<Verse[]> {
-  const path = Object.keys(localBooks).find((p) => p.endsWith(`/${file}.json`));
-  if (!path) return [];
+  const book = await loadJson<DataBook>(`pt/${file}.json`);
+  if (!book) return [];
 
-  const book = await localBooks[path]();
-  const cap = book.capitulos.find((c) => c.capitulo === chapter);
-  if (!cap) return [];
-
-  return cap.versiculos
-    .map((v) => ({
-      verse: v.numero,
-      // strip the leading "[N] " verse marker embedded in the source text
-      text: clean(v.texto.replace(/^\s*\[\d+\]\s*/, "")),
-    }))
-    .filter((v) => v.text.length > 0);
+  return (book[String(chapter)] ?? []).map((v) => ({ verse: v.v, text: v.t }));
 }
 
 /**

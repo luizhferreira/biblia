@@ -1,8 +1,14 @@
 /* ── Catena Aurea (St. Thomas Aquinas' golden chain) ──────────
  * Patristic commentary on the four Gospels, keyed by "chapter.verse".
- * Each Gospel is loaded lazily and cached independently, so opening a
- * commentary only fetches the data for the Gospel being read.
+ *
+ * `scripts/build-data.ts` fatia cada evangelho em um arquivo por capítulo mais
+ * um índice enxuto. A distinção importa: marcar quais versículos têm comentário
+ * roda a cada troca de capítulo e só consulta o índice (poucos kB por
+ * evangelho); o texto dos Padres — que é o volume — só é buscado quando o
+ * leitor de fato abre o painel, e apenas o capítulo aberto.
  */
+
+import { loadJson } from "./dataFetch";
 
 export interface CatenaSegment {
   f: string; // Church Father / source
@@ -14,38 +20,18 @@ export interface CatenaEntry {
   segments: CatenaSegment[];
 }
 
-type CatenaData = Record<string, CatenaEntry>;
+/** Capítulo → versículos com comentário. */
+type CatenaIndex = Record<string, number[]>;
 
-/** Book file id (from data/books.ts) → dynamic import of its catena. */
-const LOADERS: Record<string, () => Promise<{ default: CatenaData }>> = {
-  mt: () => import("../data/catenaMatthew.json") as Promise<{ default: CatenaData }>,
-  mc: () => import("../data/catenaMark.json") as Promise<{ default: CatenaData }>,
-  lc: () => import("../data/catenaLuke.json") as Promise<{ default: CatenaData }>,
-  jo: () => import("../data/catenaJohn.json") as Promise<{ default: CatenaData }>,
-};
+/** Versículo → comentário, dentro de um capítulo. */
+type CatenaChapter = Record<string, CatenaEntry>;
 
-const cache: Record<string, CatenaData> = {};
-const loading: Record<string, Promise<CatenaData>> = {};
+/** Book file ids (from data/books.ts) que possuem catena: os quatro evangelhos. */
+const GOSPELS = new Set(["mt", "mc", "lc", "jo"]);
 
 /** True if a catena exists for this book (the four Gospels). */
 export function catenaAvailable(bookFile: string): boolean {
-  return bookFile in LOADERS;
-}
-
-async function load(bookFile: string): Promise<CatenaData> {
-  if (cache[bookFile]) return cache[bookFile];
-  if (!loading[bookFile]) {
-    loading[bookFile] = LOADERS[bookFile]()
-      .then((m) => {
-        cache[bookFile] = (m.default ?? (m as unknown as CatenaData)) as CatenaData;
-        return cache[bookFile];
-      })
-      .catch((e) => {
-        delete loading[bookFile]; // allow retry
-        throw e;
-      });
-  }
-  return loading[bookFile];
+  return GOSPELS.has(bookFile);
 }
 
 /** Verse numbers in a chapter that have commentary (for marking them). */
@@ -54,16 +40,8 @@ export async function catenaChapterVerses(
   chapter: number,
 ): Promise<Set<number>> {
   if (!catenaAvailable(bookFile)) return new Set();
-  const data = await load(bookFile);
-  const prefix = `${chapter}.`;
-  const set = new Set<number>();
-  for (const key of Object.keys(data)) {
-    if (key.startsWith(prefix)) {
-      const v = Number(key.slice(prefix.length));
-      if (!Number.isNaN(v)) set.add(v);
-    }
-  }
-  return set;
+  const index = await loadJson<CatenaIndex>(`catena/${bookFile}/index.json`);
+  return new Set(index?.[String(chapter)] ?? []);
 }
 
 /** Returns the commentary for a Gospel verse, or null if none exists. */
@@ -73,6 +51,6 @@ export async function fetchCatena(
   verse: number,
 ): Promise<CatenaEntry | null> {
   if (!catenaAvailable(bookFile)) return null;
-  const data = await load(bookFile);
-  return data[`${chapter}.${verse}`] ?? null;
+  const data = await loadJson<CatenaChapter>(`catena/${bookFile}/${chapter}.json`);
+  return data?.[String(verse)] ?? null;
 }
