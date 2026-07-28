@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOOKS, type BookDef } from "./data/books";
 import {
   fetchChapter,
@@ -6,12 +6,16 @@ import {
   mergeVerses,
   type Lang,
   type ParallelRow,
+  type Verse,
 } from "./lib/bibleApi";
 import { fetchAveMariaChapter } from "./lib/aveMaria";
-import LiturgiaView from "./components/Liturgia";
-import CatenaPanel from "./components/CatenaPanel";
 import { Cross, Fleuron } from "./components/ornaments";
 import { catenaAvailable, catenaChapterVerses } from "./lib/catena";
+
+/* Nenhum dos dois está na tela inicial — a Liturgia é outra aba e a Catena
+   só abre ao clicar num versículo comentado. Ficam fora do bundle de entrada. */
+const LiturgiaView = lazy(() => import("./components/Liturgia"));
+const CatenaPanel = lazy(() => import("./components/CatenaPanel"));
 
 type Tab = "biblia" | "liturgia";
 /** Como o texto flui: prosa contínua, um versículo por linha, ou colunas. */
@@ -113,10 +117,18 @@ export default function App() {
 
   const [catenaVerse, setCatenaVerse] = useState<number | null>(null);
   const [catenaSet, setCatenaSet] = useState<Set<number>>(new Set());
+  /* O painel da Catena fica fora do bundle de entrada e só é montado na
+     primeira abertura. Depois permanece montado, para que as transições de
+     largura (abrir/fechar) continuem funcionando como antes. */
+  const [catenaMounted, setCatenaMounted] = useState(false);
 
   const [progress, setProgress] = useState(0);
   const [barHidden, setBarHidden] = useState(false);
   const lastScroll = useRef(0);
+  /** Colunas já resolvidas do capítulo corrente, incluindo as ocultas. */
+  const colsRef = useRef<Partial<Record<Lang, Verse[]>>>({});
+  /** `show` acessível de dentro dos callbacks assíncronos da carga. */
+  const showRef = useRef(show);
   const readerRef = useRef<HTMLElement | null>(null);
   const navRef = useRef<HTMLElement | null>(null);
   const activeBookRef = useRef<HTMLButtonElement | null>(null);
@@ -143,6 +155,17 @@ export default function App() {
   }, [bookIndex, chapter]);
 
   useEffect(() => {
+    if (catenaVerse !== null) setCatenaMounted(true);
+  }, [catenaVerse]);
+
+  /* Uma coluna recém-ligada pode ter chegado enquanto estava oculta, e nesse
+     caso `absorb` não repintou. Traz o acumulado para a tela. */
+  useEffect(() => {
+    showRef.current = show;
+    setRows(mergeVerses(colsRef.current));
+  }, [show]);
+
+  useEffect(() => {
     if (!hasCatena) {
       setCatenaSet(new Set());
       return;
@@ -156,48 +179,70 @@ export default function App() {
     };
   }, [hasCatena, book.file, chapter]);
 
-  /* ── Carga do capítulo ── */
+  /* ── Carga do capítulo ──
+     As quatro fontes disparam juntas, como antes, mas cada uma entra na tela
+     assim que chega em vez de todas esperarem a mais lenta. Isso importa
+     porque a coluna portuguesa é local (~450 ms) e as duas da Vulgata/KJV vêm
+     de api.getbible.net (~1,2 s): o leitor padrão, que só exibe o português,
+     não precisa esperar por texto que não vai ler. */
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setError(null);
-    (async () => {
-      try {
-        const [laRes, ptRes, enRes, avRes] = await Promise.allSettled([
-          fetchChapter(book.nr, chapter, "vulgate", ctrl.signal),
-          fetchLocalChapter(book.file, chapter),
-          fetchChapter(book.nr, chapter, "kjv", ctrl.signal),
-          fetchAveMariaChapter(book, chapter),
-        ]);
-        if (laRes.status === "rejected" && (laRes.reason as Error)?.name === "AbortError") return;
-        // A Ave-Maria vem de um único JSON compartilhado e não é abortável:
-        // descarta o resultado se o leitor já mudou de capítulo.
-        if (ctrl.signal.aborted) return;
-        const la = laRes.status === "fulfilled" ? laRes.value : [];
-        const pt = ptRes.status === "fulfilled" ? ptRes.value : [];
-        const en = enRes.status === "fulfilled" ? enRes.value : [];
-        const av = avRes.status === "fulfilled" ? avRes.value : [];
-        if (avRes.status === "rejected") {
-          const msg = (avRes.reason as Error)?.message ?? String(avRes.reason);
-          console.warn("[Ave-Maria]", avRes.reason);
-          setAvNote(msg);
-        } else {
-          setAvNote(av.length === 0 ? "Ave-Maria: capítulo vazio na fonte." : null);
-        }
-        if (la.length === 0 && pt.length === 0 && en.length === 0 && av.length === 0) {
-          if (laRes.status === "rejected" || ptRes.status === "rejected" || enRes.status === "rejected") {
-            setError("Não foi possível consultar o códice. Tente novamente.");
-          }
-        }
-        setRows(mergeVerses({ la, pt, en, av }));
-      } catch (e) {
-        if ((e as Error).name !== "AbortError") {
-          setError("Não foi possível consultar o códice. Tente novamente.");
-        }
-      } finally {
-        setLoading(false);
+    setAvNote(null);
+
+    const cols: Partial<Record<Lang, Verse[]>> = {};
+    colsRef.current = cols;
+
+    // A Ave-Maria vem de um único JSON compartilhado e não é abortável — daí
+    // o guarda de `aborted` aqui, que vale para todas as fontes.
+    //
+    // Só repinta quando a coluna que chegou está à vista. As ocultas ficam
+    // guardadas em `colsRef` e entram na tela no momento em que forem
+    // ligadas — repintar o capítulo inteiro por texto que ninguém vê é o
+    // tipo de trabalho de main thread que aparece direto no TBT. O português
+    // repinta sempre porque é a coluna de fallback quando nenhuma está ligada.
+    const absorb = (lang: Lang, verses: Verse[]) => {
+      if (ctrl.signal.aborted) return;
+      cols[lang] = verses;
+      if (lang === "pt" || showRef.current[lang]) setRows(mergeVerses(cols));
+    };
+
+    const la = fetchChapter(book.nr, chapter, "vulgate", ctrl.signal);
+    const pt = fetchLocalChapter(book.file, chapter);
+    const en = fetchChapter(book.nr, chapter, "kjv", ctrl.signal);
+    const av = fetchAveMariaChapter(book, chapter);
+
+    // O português é local: quando chega, já há o que ler.
+    pt.then((v) => {
+      absorb("pt", v);
+      if (!ctrl.signal.aborted) setLoading(false);
+    }).catch(() => {});
+
+    la.then((v) => absorb("la", v)).catch(() => {});
+    en.then((v) => absorb("en", v)).catch(() => {});
+
+    av.then((v) => {
+      absorb("av", v);
+      if (!ctrl.signal.aborted) {
+        setAvNote(v.length === 0 ? "Ave-Maria: capítulo vazio na fonte." : null);
       }
-    })();
+    }).catch((err: unknown) => {
+      if (ctrl.signal.aborted) return;
+      console.warn("[Ave-Maria]", err);
+      setAvNote((err as Error)?.message ?? String(err));
+    });
+
+    // Só é erro quando nada chegou de lugar nenhum.
+    Promise.allSettled([la, pt, en]).then((res) => {
+      if (ctrl.signal.aborted) return;
+      setLoading(false);
+      const nothing = Object.values(cols).every((v) => v.length === 0);
+      if (nothing && res.some((r) => r.status === "rejected")) {
+        setError("Não foi possível consultar o códice. Tente novamente.");
+      }
+    });
+
     return () => ctrl.abort();
   }, [book.nr, book.file, chapter]);
 
@@ -472,7 +517,9 @@ export default function App() {
 
       {tab === "liturgia" ? (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-8 sm:px-6 [scrollbar-gutter:stable]">
-          <LiturgiaView />
+          <Suspense fallback={<ReaderMessage>Preparando o ofício…</ReaderMessage>}>
+            <LiturgiaView />
+          </Suspense>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1">
@@ -513,7 +560,7 @@ export default function App() {
                         {title}
                       </p>
                       {items.map(({ b, i }) => (
-                        <div key={b.nr}>
+                        <div key={b.nr} className="book-row">
                           <button
                             ref={i === bookIndex ? activeBookRef : undefined}
                             onClick={() => goTo(i, 1)}
@@ -586,7 +633,7 @@ export default function App() {
                 </p>
               )}
 
-              {loading && <ReaderMessage>Iluminando o pergaminho…</ReaderMessage>}
+              {loading && <ReaderMessage reserve>Iluminando o pergaminho…</ReaderMessage>}
               {error && !loading && <ReaderMessage tone="error">{error}</ReaderMessage>}
               {empty && <ReaderMessage>Nenhum versículo encontrado para este capítulo.</ReaderMessage>}
 
@@ -756,13 +803,24 @@ export default function App() {
           </main>
 
           {/* ── Catena Aurea: painel que empurra o texto ── */}
-          <CatenaPanel
-            bookFile={book.file}
-            bookLa={book.la}
-            chapter={chapter}
-            verse={catenaVerse}
-            onClose={() => setCatenaVerse(null)}
-          />
+          {catenaMounted && (
+            <Suspense
+              fallback={
+                <aside
+                  aria-hidden="true"
+                  className="w-[400px] shrink-0 border-l border-[var(--line)] bg-[var(--sink)]"
+                />
+              }
+            >
+              <CatenaPanel
+                bookFile={book.file}
+                bookLa={book.la}
+                chapter={chapter}
+                verse={catenaVerse}
+                onClose={() => setCatenaVerse(null)}
+              />
+            </Suspense>
+          )}
         </div>
       )}
 
@@ -860,15 +918,26 @@ function Slider({
   );
 }
 
+/**
+ * `reserve` mantém a altura do artigo durante a carga próxima da altura final,
+ * para que o rodapé de créditos não seja empurrado dentro da viewport quando os
+ * versículos entram no fluxo — era a origem de todo o CLS da página.
+ */
 function ReaderMessage({
   children,
   tone = "default",
+  reserve = false,
 }: {
   children: React.ReactNode;
   tone?: "default" | "error";
+  reserve?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 px-6 py-20 text-center">
+    <div
+      className={`flex flex-col items-center justify-center gap-3 px-6 py-20 text-center ${
+        reserve ? "min-h-[70vh]" : ""
+      }`}
+    >
       <Cross className={`candle h-5 w-5 ${tone === "error" ? "text-[#a24a3f]" : "text-[var(--gold-dim)]"}`} />
       <p
         className={`font-display text-[0.78rem] uppercase tracking-[0.26em] ${
