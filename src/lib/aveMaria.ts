@@ -4,15 +4,10 @@ import type { Verse } from "./bibleApi";
 /**
  * Tradução Ave-Maria (Editora Ave-Maria).
  *
- * O texto NÃO é empacotado no projeto: é buscado em runtime a partir de uma
- * cópia pública em JSON, servida via CDN, e mantido apenas em memória durante
- * a sessão (o navegador ainda reaproveita o cache HTTP entre visitas).
- *
- * A origem pode ser trocada por VITE_AVEMARIA_URL sem alterar código.
+ * Lê o arquivo local `bibliaAveMaria.json` desta mesma pasta, colocado no
+ * projeto pelo usuário. O import é dinâmico: os ~6,6 MB só são carregados e
+ * convertidos quando a coluna AM é aberta pela primeira vez.
  */
-const SOURCE =
-  (import.meta.env?.VITE_AVEMARIA_URL as string | undefined) ??
-  "https://cdn.jsdelivr.net/gh/fidalgobr/bibliaAveMariaJSON@main/bibliaAveMaria.json";
 
 /* ── Formato do JSON de origem ─────────────────────────── */
 
@@ -96,14 +91,11 @@ let cache: Promise<SrcBible> | null = null;
 
 function load(): Promise<SrcBible> {
   if (!cache) {
-    cache = fetch(SOURCE)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Ave-Maria indisponível (${res.status}).`);
-        return res.json() as Promise<SrcBible>;
-      })
+    cache = import("./bibliaAveMaria.json")
+      .then((m) => (m.default ?? m) as SrcBible)
       .catch((err) => {
-        cache = null; // permite nova tentativa após falha de rede
-        throw err;
+        cache = null; // permite nova tentativa
+        throw new Error(`Ave-Maria: falha ao ler o JSON local (${err}).`);
       });
   }
   return cache;
