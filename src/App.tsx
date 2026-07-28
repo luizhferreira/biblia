@@ -94,6 +94,8 @@ export default function App() {
   const [rows, setRows] = useState<ParallelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Motivo da ausência da coluna Ave-Maria (fonte externa, pode falhar). */
+  const [avNote, setAvNote] = useState<string | null>(null);
 
   const [mode, setMode] = useState<Mode>(prefs.current.mode);
   const [theme, setTheme] = useState<Theme>(prefs.current.theme);
@@ -175,6 +177,13 @@ export default function App() {
         const pt = ptRes.status === "fulfilled" ? ptRes.value : [];
         const en = enRes.status === "fulfilled" ? enRes.value : [];
         const av = avRes.status === "fulfilled" ? avRes.value : [];
+        if (avRes.status === "rejected") {
+          const msg = (avRes.reason as Error)?.message ?? String(avRes.reason);
+          console.warn("[Ave-Maria]", avRes.reason);
+          setAvNote(msg);
+        } else {
+          setAvNote(av.length === 0 ? "Ave-Maria: capítulo vazio na fonte." : null);
+        }
         if (la.length === 0 && pt.length === 0 && en.length === 0 && av.length === 0) {
           if (laRes.status === "rejected" || ptRes.status === "rejected" || enRes.status === "rejected") {
             setError("Não foi possível consultar o códice. Tente novamente.");
@@ -570,6 +579,12 @@ export default function App() {
                   </div>
                 )}
               </header>
+
+              {!loading && show.av && avNote && (
+                <p className="mb-6 rounded-md border border-[var(--line)] bg-[var(--sink)] px-3 py-2 text-center text-[0.72rem] text-[var(--faint)]">
+                  {avNote}
+                </p>
+              )}
 
               {loading && <ReaderMessage>Iluminando o pergaminho…</ReaderMessage>}
               {error && !loading && <ReaderMessage tone="error">{error}</ReaderMessage>}

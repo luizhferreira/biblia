@@ -27,14 +27,13 @@ interface SrcChapter {
 }
 
 interface SrcBook {
-  nome: string;
+  nome?: string;
+  livro?: string;
   capitulos: SrcChapter[];
 }
 
-interface SrcBible {
-  antigoTestamento: SrcBook[];
-  novoTestamento: SrcBook[];
-}
+/** Chaves de topo variam entre cópias; tratamos como mapa de arrays. */
+type SrcBible = Record<string, unknown>;
 
 /* ── Normalização de nomes de livro ────────────────────── */
 
@@ -110,30 +109,57 @@ function load(): Promise<SrcBible> {
   return cache;
 }
 
-/** Localiza o livro correspondente dentro do testamento certo. */
-function findBook(bible: SrcBible, book: BookDef): SrcBook | undefined {
-  const list =
-    book.testament === "AT" ? bible.antigoTestamento : bible.novoTestamento;
-  if (!Array.isArray(list)) return undefined;
+/**
+ * Separa os livros por testamento sem depender do nome exato das chaves:
+ * qualquer propriedade de topo que seja um array de livros é considerada, e a
+ * classificação vem do próprio nome da chave ("antigo/velho/old" vs resto).
+ */
+function testaments(bible: SrcBible): { AT: SrcBook[]; NT: SrcBook[] } {
+  const out = { AT: [] as SrcBook[], NT: [] as SrcBook[] };
+  for (const [key, value] of Object.entries(bible ?? {})) {
+    if (!Array.isArray(value)) continue;
+    const books = value.filter(
+      (b): b is SrcBook => !!b && typeof b === "object" && "capitulos" in b,
+    );
+    if (books.length === 0) continue;
+    const side = /antig|velho|old|vetus/i.test(key) ? "AT" : "NT";
+    out[side].push(...books);
+  }
+  return out;
+}
 
-  const keys = [book.pt, ...(ALIASES[book.file] ?? [])].map(norm);
+/** Nome do livro na fonte, tolerando variações de campo. */
+const bookName = (b: SrcBook): string => b.nome ?? b.livro ?? "";
 
-  const exact = list.find((x) => keys.includes(norm(x.nome)));
-  if (exact) return exact;
-
+function matches(srcName: string, keys: string[]): boolean {
+  const n = norm(srcName);
+  if (keys.includes(n)) return true;
   // Títulos longos ("Primeira Carta aos Coríntios"): compara o miolo, mas
   // exige que o numeral inicial coincida para não confundir 1/2/3 João.
-  return list.find((x) => {
-    const n = norm(x.nome);
-    return keys.some((k) => {
-      if (leadDigit(n) !== leadDigit(k)) return false;
-      const a = stripLead(n);
-      const b = stripLead(k);
-      // Ambos precisam ter corpo suficiente: senão "Jó" casaria com "João".
-      if (a.length < 4 || b.length < 4) return false;
-      return a.includes(b) || b.includes(a);
-    });
+  return keys.some((k) => {
+    if (leadDigit(n) !== leadDigit(k)) return false;
+    const a = stripLead(n);
+    const b = stripLead(k);
+    // Ambos precisam ter corpo suficiente: senão "Jó" casaria com "João".
+    if (a.length < 4 || b.length < 4) return false;
+    return a.includes(b) || b.includes(a);
   });
+}
+
+/** Localiza o livro: primeiro no testamento esperado, depois no outro. */
+function findBook(bible: SrcBible, book: BookDef): SrcBook | undefined {
+  const { AT, NT } = testaments(bible);
+  const keys = [book.pt, ...(ALIASES[book.file] ?? [])].map(norm);
+
+  const preferred = book.testament === "AT" ? AT : NT;
+  const other = book.testament === "AT" ? NT : AT;
+
+  // Exato antes de aproximado, e dentro do testamento certo antes de fora.
+  return (
+    preferred.find((x) => keys.includes(norm(bookName(x)))) ??
+    preferred.find((x) => matches(bookName(x), keys)) ??
+    other.find((x) => keys.includes(norm(bookName(x))))
+  );
 }
 
 function clean(text: string): string {
@@ -146,7 +172,8 @@ function clean(text: string): string {
 
 /**
  * Devolve os versículos de um capítulo na tradução Ave-Maria.
- * Retorna lista vazia se o livro ou capítulo não existir na fonte.
+ * Lança erro descritivo quando a fonte falha ou não contém o livro/capítulo,
+ * para que a interface possa dizer o motivo em vez de só ficar vazia.
  */
 export async function fetchAveMariaChapter(
   book: BookDef,
@@ -154,6 +181,13 @@ export async function fetchAveMariaChapter(
 ): Promise<Verse[]> {
   const bible = await load();
   const src = findBook(bible, book);
+  if (!src) {
+    const { AT, NT } = testaments(bible);
+    throw new Error(
+      `Ave-Maria: livro "${book.pt}" não encontrado na fonte ` +
+        `(${AT.length} livros no AT, ${NT.length} no NT).`,
+    );
+  }
   if (!src?.capitulos) return [];
 
   const cap =
