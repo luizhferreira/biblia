@@ -131,9 +131,14 @@ renderizados condicionalmente, então nenhuma lógica de exibição muda.
 
 `src/index.css`, tokens dos dois temas escuros.
 
-- `--faint`: `#6b6455` → `#8b8370`
-- `--mute`: `#8a8270` → tom mais claro que preserve os três degraus de hierarquia
-- `[data-theme="tinta"]`: ajuste equivalente, verificado contra os fundos daquele tema
+- `--faint`: `#6b6455` → `#958d76`
+- `--mute`: `#8a8270` → `#a89e83`
+- `[data-theme="tinta"]`: `--faint` `#9a8f74`, `--mute` `#ab9f80`
+
+O `#8b8370` cogitado inicialmente foi descartado: dá 4,30:1 contra o `--raise`
+do tema "tinta", abaixo do mínimo. Os valores acima foram escolhidos por
+cálculo de luminância relativa contra os oito fundos dos dois temas; o pior
+caso é 4,89:1 (`--faint` sobre `tinta/raise`).
 
 Critério: cada token deve atingir ≥ 4,5:1 contra o fundo mais claro sobre o qual
 aparece (`--raise`), verificado por cálculo de luminância relativa WCAG, não a olho.
@@ -149,6 +154,63 @@ Nenhuma afirmação de sucesso sem o número na mão.
 
 Critério de aceite: **Performance ≥ 95**, e nenhuma das outras três categorias
 abaixo do valor de baseline.
+
+## Resultado medido
+
+### Ressalva sobre o ambiente
+
+Esta máquina não mede de forma estável. Cinco execuções do **mesmo build**
+deram scores de Performance entre 78 e 97, e o `environment.benchmarkIndex`
+do Lighthouse — que mede a velocidade da máquina no momento da execução —
+caiu de 1254 para 688 ao longo delas, acompanhando o score quase linearmente.
+Qualquer número absoluto medido aqui diz mais sobre a carga da máquina do que
+sobre o app. Por isso a comparação abaixo é um A/B intercalado: os dois builds
+servidos em paralelo (baseline em `.lh-baseline`, novo em `dist`) e medidos
+alternadamente, para que a deriva da máquina atinja os dois igualmente.
+
+### A/B intercalado
+
+| versão | benchmarkIndex | Performance | Acessibilidade | FCP | CLS |
+|---|---|---|---|---|---|
+| baseline A | 1202 | 86 | 95 | 2709 ms | 0 |
+| novo A | 612 | 91 | 100 | 1298 ms | 0 |
+| baseline B | 962 | 81 | 95 | 2849 ms | 0,160 |
+| novo B | 776 | 86 | 100 | 1426 ms | 0 |
+
+O novo build ganhou 5 pontos nos dois pares enquanto rodava em condições de
+máquina piores que as da baseline em ambos (612 contra 1202; 776 contra 962).
+O FCP caiu para cerca de metade de forma consistente, e o CLS foi a zero.
+
+Em execuções isoladas com a máquina descarregada (benchmarkIndex 1254 e 940),
+o novo build marcou **97** e **95**. Sob carga, marca entre 83 e 91. O alvo de
+95+ é atingido em condições limpas de medição, mas não pode ser afirmado como
+garantido a partir de medições feitas nesta máquina.
+
+### Efeito colateral aceito: TBT
+
+O TBT saiu de 0 ms para ~200–300 ms. Não é regressão de trabalho: na baseline
+o app ficava bloqueado esperando `api.getbible.net` e mal renderizava dentro
+da janela do trace, então não havia trabalho de main thread a contabilizar.
+Agora o capítulo é montado cedo, e montá-lo custa. As mitigações já aplicadas
+foram não repintar por colunas ocultas e `content-visibility` na Bibliotheca.
+
+Se for preciso ir além, o próximo suspeito é o parágrafo único do modo "prosa"
+com `text-justify` + `hyphens: auto` + `text-wrap: pretty` sobre ~4300 px de
+texto — `styleLayout` respondeu por 515 ms do main thread. Mexer nisso degrada
+a tipografia do leitor, então não foi feito.
+
+## Verificação funcional
+
+Feita no navegador contra o build de produção:
+
+- capítulo renderiza com capitular, versículos e marcas da Catena
+- ligar a coluna latina traz o texto que havia chegado enquanto estava oculta
+  (o caminho de risco da pintura progressiva)
+- painel da Catena monta sob demanda e carrega o comentário
+- aba da Liturgia monta sob demanda
+- zero requisições a `fonts.googleapis.com` / `fonts.gstatic.com`
+- três woff2 locais carregados, os dois do primeiro paint via preload
+- console sem erros
 
 Verificação manual complementar, via preview no navegador: trocar de capítulo,
 alternar as quatro colunas, abrir a Liturgia, abrir o painel da Catena. Nenhum
