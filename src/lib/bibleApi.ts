@@ -5,76 +5,33 @@ export interface Verse {
   text: string;
 }
 
-interface ApiVerse {
-  chapter: number;
-  verse: number;
-  text: string;
-}
-
-interface ApiResponse {
-  verses?: ApiVerse[];
-}
-
-const BASE = "https://api.getbible.net/v2";
-
-function clean(text: string): string {
-  return text
-    .replace(/<[^>]*>/g, "") // strip any HTML/OSIS markup
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 /**
- * Fetch a chapter for a given translation from getbible.net.
- * translation: "vulgate" (Vulgata Clementina)
- * Returns a list of verses (empty if unavailable in that version).
+ * Available parallel columns.
+ * "pt" = Matos Soares · "av" = Ave-Maria
+ * "la" = Vulgata Clementina · "en" = King James
+ *
+ * Todas as quatro traduções são servidas de `public/data/{lang}/{file}.json`,
+ * geradas por `scripts/build-data.ts`. A Vulgata e a KJV, antes buscadas em
+ * runtime na getbible.net, agora vêm empacotadas como o resto.
  */
-export async function fetchChapter(
-  bookNr: number,
-  chapter: number,
-  translation: string,
-  signal?: AbortSignal,
-): Promise<Verse[]> {
-  const url = `${BASE}/${translation}/${bookNr}/${chapter}.json`;
-
-  const res = await fetch(url, { signal });
-  if (!res.ok) {
-    if (res.status === 404) return [];
-    throw new Error(`Falha ao carregar (${res.status}).`);
-  }
-
-  const data: ApiResponse = await res.json();
-  if (!data.verses) return [];
-
-  return data.verses
-    .map((v) => ({ verse: v.verse, text: clean(v.text) }))
-    .filter((v) => v.text.length > 0);
-}
-
-/* ── Tradução Matos Soares (arquivos locais em biblia-db-main) ── */
+export type Lang = "la" | "pt" | "en" | "av";
 
 /**
- * Load a chapter of the Matos Soares translation. `scripts/build-data.ts`
- * normaliza os arquivos de `biblia-db-main/` para `public/data/pt/`, de onde
- * cada livro é buscado sob demanda. `file` is the book filename without
- * extension (e.g. "gn", "1sm").
+ * Load a chapter of a bundled translation from `public/data/{lang}/{file}.json`.
+ * `file` is the book filename without extension (e.g. "gn", "1sm"). Devolve
+ * lista vazia quando a tradução não cobre aquele livro/capítulo (ex.: a KJV não
+ * tem os deuterocanônicos) — ausência é estado normal, não erro.
  */
 export async function fetchLocalChapter(
   file: string,
   chapter: number,
+  lang: Exclude<Lang, "av"> = "pt",
 ): Promise<Verse[]> {
-  const book = await loadJson<DataBook>(`pt/${file}.json`);
+  const book = await loadJson<DataBook>(`${lang}/${file}.json`);
   if (!book) return [];
 
   return (book[String(chapter)] ?? []).map((v) => ({ verse: v.v, text: v.t }));
 }
-
-/**
- * Available parallel columns.
- * "pt" = Matos Soares (empacotado) · "av" = Ave-Maria (buscado em runtime)
- * "la" = Vulgata Clementina · "en" = King James
- */
-export type Lang = "la" | "pt" | "en" | "av";
 
 export type ParallelRow = { verse: number } & Partial<Record<Lang, string>>;
 

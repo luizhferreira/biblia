@@ -8,7 +8,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  base: "./", // caminhos relativos — funciona no GitHub Pages em qualquer subpasta
+  // Servido a partir da raiz do domínio (Cloudflare / domínio próprio). URLs de
+  // capítulo aninhadas (`/joao/3`) exigem base absoluta: com base relativa os
+  // assets quebrariam a partir de uma subpasta. Ver scripts/prerender.ts.
+  base: "/",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

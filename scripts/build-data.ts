@@ -7,15 +7,21 @@
  *
  *   src/lib/bibliaAveMaria.json   → public/data/av/{file}.json
  *   biblia-db-main/**\/*.json      → public/data/pt/{file}.json
+ *   vendor/vulgate.json (getbible) → public/data/la/{file}.json
+ *   vendor/kjv.json     (getbible) → public/data/en/{file}.json
  *   src/data/catena{Gospel}.json  → public/data/catena/{file}/{capítulo}.json
  *                                 + public/data/catena/{file}/index.json
+ *
+ * A Vulgata e a KJV vêm da API pública getbible.net: a tradução inteira é
+ * baixada uma única vez para `vendor/` (gitignored, cache local) e fatiada aqui,
+ * de modo que o runtime lê tudo localmente e o site não depende da API externa.
  *
  * Toda a limpeza de texto e a correspondência de nomes de livro acontecem aqui,
  * uma vez, em vez de a cada leitura no navegador. Um livro que não bata sai como
  * erro de build, não como coluna vazia em produção.
  */
 
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BOOKS, type BookDef } from "../src/data/books.ts";
@@ -301,11 +307,78 @@ function buildCatena(): void {
   console.log(`  catena/   4 evangelhos · ${kb(bytes)}`);
 }
 
+/* ── Vulgata Clementina & King James (getbible.net) ────────
+ * A API entrega a tradução inteira num único JSON
+ * (books[].nr → chapters[].verses[]). Baixamos uma vez para `vendor/` e
+ * fatiamos por livro, na mesma forma compacta do resto. A KJV não tem os
+ * deuterocanônicos: esses livros simplesmente não geram arquivo (coluna vazia).
+ */
+
+interface GetVerse {
+  verse: number;
+  text: string;
+}
+interface GetChapter {
+  chapter: number;
+  verses: GetVerse[];
+}
+interface GetBook {
+  nr: number;
+  name: string;
+  chapters: GetChapter[];
+}
+interface GetBible {
+  books: GetBook[];
+}
+
+/** Baixa `vendor/{name}.json` da getbible.net se ainda não estiver em cache. */
+async function ensureVendor(name: string, translation: string): Promise<string> {
+  const file = path.join(ROOT, "vendor", `${name}.json`);
+  if (existsSync(file)) return file;
+  const url = `https://api.getbible.net/v2/${translation}.json`;
+  console.log(`  baixando ${name} de getbible.net …`);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Falha ao baixar ${name}: HTTP ${res.status} (${url})`);
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, await res.text());
+  return file;
+}
+
+async function buildGetbible(
+  name: string,
+  translation: string,
+  outDir: "la" | "en",
+): Promise<void> {
+  const file = await ensureVendor(name, translation);
+  const bible = JSON.parse(readFileSync(file, "utf8")) as GetBible;
+  const byNr = new Map(bible.books.map((b) => [b.nr, b]));
+
+  let bytes = 0;
+  let count = 0;
+  for (const book of BOOKS) {
+    const src = byNr.get(book.nr);
+    if (!src) continue; // KJV sem deuterocanônicos — esperado
+
+    const out: OutBook = {};
+    for (const cap of src.chapters ?? []) {
+      const verses = (cap.verses ?? [])
+        .map((v) => ({ v: v.verse, t: squash(stripTags(v.text)) }))
+        .filter((v) => v.t.length > 0);
+      if (verses.length > 0) out[String(cap.chapter)] = verses;
+    }
+    bytes += write(path.join(outDir, `${book.file}.json`), out);
+    count++;
+  }
+  console.log(`  ${outDir}/       ${count} livros · ${kb(bytes)}`);
+}
+
 /* ── Execução ──────────────────────────────────────────────*/
 
 console.log("Fatiando dados para public/data/ …");
 rmSync(OUT, { recursive: true, force: true });
 buildAveMaria();
 buildMatosSoares();
+await buildGetbible("vulgate", "vulgate", "la");
+await buildGetbible("kjv", "kjv", "en");
 buildCatena();
 console.log("Pronto.");

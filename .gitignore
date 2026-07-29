@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Vulgata/KJV baixadas da getbible.net (cache local; re-baixadas no build)
+vendor/
 # derivado de src/lib/bibliaAveMaria.json, src/data/catena*.json e
 # biblia-db-main/ por scripts/build-data.ts (roda no predev/prebuild)
 public/data/

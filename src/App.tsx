@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BOOKS, type BookDef } from "./data/books";
 import {
-  fetchChapter,
   fetchLocalChapter,
   mergeVerses,
   type Lang,
   type ParallelRow,
 } from "./lib/bibleApi";
 import { fetchAveMariaChapter } from "./lib/aveMaria";
+import { chapterPath, parsePath } from "./lib/route";
 import LiturgiaView from "./components/Liturgia";
 import CatenaPanel from "./components/CatenaPanel";
 import { Cross, Fleuron } from "./components/ornaments";
@@ -84,13 +84,19 @@ function normalize(s: string): string {
 
 export default function App() {
   const prefs = useRef<Prefs>(loadPrefs());
+  // A URL manda no estado inicial (link direto / capítulo pré-renderizado);
+  // sem rota casável, cai no último lido (localStorage) e daí no padrão.
+  const initialRoute = useRef(parsePath(window.location.pathname));
 
   const [tab, setTab] = useState<Tab>("biblia");
   const [bookIndex, setBookIndex] = useState(() => {
+    if (initialRoute.current) return initialRoute.current.bookIndex;
     const i = BOOKS.findIndex((b) => b.file === prefs.current.file);
     return i < 0 ? BOOKS.findIndex((b) => b.file === "jo") : i;
   });
-  const [chapter, setChapter] = useState(prefs.current.chapter);
+  const [chapter, setChapter] = useState(
+    () => initialRoute.current?.chapter ?? prefs.current.chapter,
+  );
   const [rows, setRows] = useState<ParallelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -142,6 +148,37 @@ export default function App() {
     setCatenaVerse(null);
   }, [bookIndex, chapter]);
 
+  /* ── URL ↔ estado ──
+   * Reflete o capítulo corrente na barra de endereço (pushState) para que cada
+   * leitura tenha URL própria, compartilhável e indexável. O primeiro sync é
+   * pulado: a URL já veio certa (link direto ou padrão). `skipPush` também evita
+   * um push redundante quando a mudança de estado veio do próprio popstate.
+   */
+  const skipPush = useRef(true);
+  useEffect(() => {
+    if (skipPush.current) {
+      skipPush.current = false;
+      return;
+    }
+    const path = chapterPath(bookIndex, chapter);
+    if (window.location.pathname !== path) {
+      window.history.pushState({ bookIndex, chapter }, "", path);
+    }
+  }, [bookIndex, chapter]);
+
+  useEffect(() => {
+    const onPop = () => {
+      const r = parsePath(window.location.pathname);
+      if (!r) return;
+      skipPush.current = true;
+      setBookIndex(r.bookIndex);
+      setChapter(r.chapter);
+      setTab("biblia");
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   useEffect(() => {
     if (!hasCatena) {
       setCatenaSet(new Set());
@@ -164,14 +201,13 @@ export default function App() {
     (async () => {
       try {
         const [laRes, ptRes, enRes, avRes] = await Promise.allSettled([
-          fetchChapter(book.nr, chapter, "vulgate", ctrl.signal),
-          fetchLocalChapter(book.file, chapter),
-          fetchChapter(book.nr, chapter, "kjv", ctrl.signal),
+          fetchLocalChapter(book.file, chapter, "la"),
+          fetchLocalChapter(book.file, chapter, "pt"),
+          fetchLocalChapter(book.file, chapter, "en"),
           fetchAveMariaChapter(book, chapter),
         ]);
-        if (laRes.status === "rejected" && (laRes.reason as Error)?.name === "AbortError") return;
-        // A Ave-Maria vem de um único JSON compartilhado e não é abortável:
-        // descarta o resultado se o leitor já mudou de capítulo.
+        // As leituras são locais e não abortáveis: descarta o resultado se o
+        // leitor já trocou de capítulo antes de a Promise resolver.
         if (ctrl.signal.aborted) return;
         const la = laRes.status === "fulfilled" ? laRes.value : [];
         const pt = ptRes.status === "fulfilled" ? ptRes.value : [];
