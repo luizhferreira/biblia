@@ -171,8 +171,14 @@ function applyTemplate(
   template: string,
   content: string,
   meta: { title: string; desc: string; canonical: string },
+  opts: { dropDataPreload?: boolean } = {},
 ): string {
   let html = template;
+  // O preload de `data/pt/jo.json` só acelera a página padrão (João 1). Nas
+  // demais é um recurso "preloaded but not used" — remove-o fora da home.
+  if (opts.dropDataPreload) {
+    html = html.replace(/\s*<link rel="preload" as="fetch" href="\/data\/[^"]+"[^>]*>/, "");
+  }
   html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${escHtml(meta.title)}</title>`);
   html = html.replace(
     /<meta\s+name="description"[\s\S]*?>/,
@@ -248,7 +254,7 @@ for (let bi = 0; bi < BOOKS.length; bi++) {
   const b = BOOKS[bi];
   for (let ch = 1; ch <= b.chapters; ch++) {
     const meta = chapterMeta(b, ch);
-    const html = applyTemplate(template, chapterContent(bi, ch), meta);
+    const html = applyTemplate(template, chapterContent(bi, ch), meta, { dropDataPreload: true });
     writeHtml(path.join(b.slug, String(ch)), html);
     pages++;
   }

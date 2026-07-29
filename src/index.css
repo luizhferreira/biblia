@@ -1,5 +1,87 @@
 @import "tailwindcss";
 
+/* ── Fontes auto-hospedadas ─────────────────────────────────
+   Arquivos em `public/fonts/`, servidos junto com o app: sem CDN de
+   terceiro no caminho crítico da renderização. Só os subsets `latin` e
+   `latin-ext` são embarcados — o app é português e latim.
+
+   Os `url()` são relativos ao CSS emitido (`dist/assets/index-*.css`),
+   não a este arquivo, para não depender de caminho absoluto e continuar
+   funcionando em subpasta no GitHub Pages (`base: "./"`). O Vite avisa no
+   build que não resolveu esses caminhos — é esperado: ele os deixa intactos,
+   que é justamente o que queremos.
+
+   Cinzel e EB Garamond são variable fonts: um arquivo cobre 400–800. */
+
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/cinzel-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Cinzel";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/cinzel-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/ebgaramond-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/ebgaramond-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/ebgaramond-italic-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "EB Garamond";
+  font-style: italic;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url("../fonts/ebgaramond-italic-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
+    U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
+    U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "UnifrakturMaguntia";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/unifraktur-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   color-scheme: dark;
 
@@ -12,8 +94,10 @@
   --line-soft: rgba(191, 149, 63, 0.1);
   --ink: #e0d5bb;
   --ink-2: #c3b797;
-  --mute: #8a8270;
-  --faint: #6b6455;
+  /* --mute e --faint atingem 4,5:1 (WCAG AA, texto pequeno) contra o fundo
+     mais claro sobre o qual aparecem, que é o --raise do tema "tinta". */
+  --mute: #a89e83;
+  --faint: #958d76;
   --gold: #c9a55f;
   --gold-dim: #8a7440;
   --gold-lit: #f0d693;
@@ -29,8 +113,8 @@
   --line-soft: rgba(191, 149, 63, 0.08);
   --ink: #d9cfb6;
   --ink-2: #bcb094;
-  --mute: #8d8471;
-  --faint: #6f6858;
+  --mute: #ab9f80;
+  --faint: #9a8f74;
 }
 
 html,
@@ -149,6 +233,17 @@ textarea {
 }
 .verse-row[data-active="1"] {
   background: rgba(201, 165, 95, 0.09);
+}
+
+/* A Bibliotheca lista os 73 livros de uma vez, mas o `nav` é rolável e mostra
+   uns dez. `content-visibility` deixa o navegador pular estilo e layout dos que
+   estão fora da vista até que se role até eles — no primeiro paint isso é a
+   maior parte da lista. `contain-intrinsic-size` reserva a altura estimada para
+   que a barra de rolagem não salte, e o `auto` faz o navegador substituí-la
+   pela altura real depois que a linha é renderizada uma vez. */
+.book-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 33px;
 }
 
 /* Painéis laterais que empurram o texto (não cobrem) */
